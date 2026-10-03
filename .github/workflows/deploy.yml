@@ -49,8 +49,12 @@ jobs:
             --min-instances=0 --max-instances=2 --concurrency=20 --memory=256Mi --cpu=1 \
             --timeout=60 --cpu-throttling \
             --set-secrets=GEMINI_API_KEY=runner-gemini-api-key:1 \
-            --set-env-vars=GOOGLE_CLOUD_PROJECT=runner-mdo-production,FIREBASE_APP_ID=1:42099202530:ios:5582ad2e8f01b26c4ec1bb,GEMINI_MODEL=gemini-3.5-flash-lite,AI_MONTHLY_BUDGET_TRY=300,AI_RESERVATION_TRY=2,RUN_DAILY_LIMIT=3,LIVE_DAILY_LIMIT=24
+            --set-env-vars=GOOGLE_CLOUD_PROJECT=runner-mdo-production,FIREBASE_APP_ID=1:42099202530:ios:5582ad2e8f01b26c4ec1bb,GEMINI_MODEL=gemini-3.5-flash-lite,AI_MONTHLY_BUDGET_TRY=300,AI_RESERVATION_TRY=2,RUN_DAILY_LIMIT=3,LIVE_DAILY_LIMIT=24,DASHBOARD_ORIGIN=https://runner-api-lradqed2xa-ew.a.run.app
       - name: Verify health
         run: |
           endpoint=$(gcloud run services describe runner-api --project=runner-mdo-production --region=europe-west1 --format='value(status.url)')
           curl --fail --retry 3 "$endpoint/health"
+          curl --fail --silent --retry 3 "$endpoint/dashboard" > /tmp/runner-dashboard.html
+          test -s /tmp/runner-dashboard.html
+          curl --fail --silent "$endpoint/dashboard/dashboard.js" > /tmp/runner-dashboard.js
+          test -s /tmp/runner-dashboard.js

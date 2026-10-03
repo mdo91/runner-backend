@@ -2,7 +2,9 @@ FROM node:22-slim AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
-COPY tsconfig.json ./
+COPY tsconfig*.json ./
+COPY web ./web
+COPY scripts ./scripts
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
 FROM node:22-slim

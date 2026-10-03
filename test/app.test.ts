@@ -6,19 +6,7 @@ import { inputHash } from '../src/store.js';
 import type { Firestore } from 'firebase-admin/firestore';
 import { requestSchema, type Explanation } from '../src/contracts.js';
 
-// Exercise the actual FirestoreStore's transaction code with a serialized document store.
-class Documents {
-  data = new Map<string,any>(); private tail=Promise.resolve();
-  doc(path:string):any {return {path,collection:(name:string)=>({path:`${path}/${name}`,doc:(key:string)=>this.doc(`${path}/${name}/${key}`)}),set:async(value:any)=>{this.data.set(path,value);}};}
-  async runTransaction<T>(body:(tx:any)=>Promise<T>):Promise<T> {
-    let release!:()=>void;const previous=this.tail;this.tail=new Promise<void>(r=>{release=r});await previous;
-    const reads=(ref:any)=>({data:()=>this.data.get(ref.path)});
-    const tx={get:async(ref:any)=>reads(ref),getAll:async(...refs:any[])=>refs.map(reads),
-      set:(ref:any,value:any,options?:any)=>{const old=options?.merge?this.data.get(ref.path)??{}:{};const next={...old,...value};if(value.reservedTRY?.operand)next.reservedTRY=(old.reservedTRY??0)+value.reservedTRY.operand;this.data.set(ref.path,next)},delete:(ref:any)=>this.data.delete(ref.path)};
-    try{return await body(tx)}finally{release()}
-  }
-  async recursiveDelete(collection:any) {for(const key of this.data.keys())if(key.startsWith(collection.path+'/'))this.data.delete(key);}
-}
+import { Documents } from './documents.js';
 const input = requestSchema.parse({schemaVersion:1,id:'27f937c4-bc4c-4e10-9a52-467039d8a428',consentVersion:'2026-10-03',
   metrics:{distanceMeters:5000,elapsedSeconds:1600,movingSeconds:1500,averagePaceSecondsPerKm:300,averageHeartRate:145,maxHeartRate:160,activeEnergyKcal:400,elevationGainMeters:null,pacingCoefficientOfVariation:null,heartRateCoverage:0.8},
   baseline:{comparableRunCount:0,averagePaceSecondsPerKm:null,averageHeartRate:null,paceChangePercent:null,vo2Max:null,previousVo2Max:null,recoveryBpm:null},

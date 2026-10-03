@@ -1,1 +1,66 @@
-{"indexes":[],"fieldOverrides":[{"collectionGroup":"analyses","fieldPath":"expiresAt","ttl":true,"indexes":[]},{"collectionGroup":"quotas","fieldPath":"expiresAt","ttl":true,"indexes":[]},{"collectionGroup":"analyses","fieldPath":"report","indexes":[]}]}
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "analyses",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "quotas",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "analyses",
+      "fieldPath": "report",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "dashboardLinks",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "dashboardSessions",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "dashboardRates",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "historyQuotas",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "details",
+      "fieldPath": "route",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "details",
+      "fieldPath": "series",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "details",
+      "fieldPath": "splits",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "details",
+      "fieldPath": "report",
+      "indexes": []
+    }
+  ]
+}

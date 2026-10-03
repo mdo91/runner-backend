@@ -7,11 +7,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "node node_modules/typescript/bin/tsc",
+    "build": "node node_modules/typescript/bin/tsc && node node_modules/typescript/bin/tsc -p tsconfig.web.json && node scripts/build-web.mjs",
     "start": "node dist/src/index.js",
     "dev": "node --import tsx --watch src/index.ts",
     "test": "node --import tsx --test test/*.test.ts",
-    "check": "node node_modules/typescript/bin/tsc --noEmit"
+    "check": "node node_modules/typescript/bin/tsc --noEmit && node node_modules/typescript/bin/tsc -p tsconfig.web.json --noEmit"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
