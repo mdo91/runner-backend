@@ -51,4 +51,4 @@ To rotate Gemini, create a Gemini-only restricted key, add a new Secret Manager 
 
 ## Current release gates
 
-A funded Gemini API billing account must be linked and a synthetic provider request must pass before enabling production AI use. Full mobile Apple authentication/App Attest and account deletion require a signed physical device test. See the mobile repository's device validation checklist.
+Runner is linked to the selected funded billing account, with the project-scoped ₺500 budget and all three alert thresholds verified. A synthetic request to `gemini-3.5-flash-lite` passed response validation on October 3, 2026. GitHub Actions passed validation and deployed the production service using workload identity federation. Full mobile Apple authentication/App Attest and account deletion still require a signed physical device test. See the mobile repository's device validation checklist.
