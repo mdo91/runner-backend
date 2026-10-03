@@ -1,0 +1,43 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { FirestoreStore } from '../src/firestore-store.js';
+import { createApp } from '../src/app.js';
+import { inputHash } from '../src/store.js';
+import type { Firestore } from 'firebase-admin/firestore';
+import { requestSchema, type Explanation } from '../src/contracts.js';
+
+// Exercise the actual FirestoreStore's transaction code with a serialized document store.
+class Documents {
+  data = new Map<string,any>(); private tail=Promise.resolve();
+  doc(path:string):any {return {path,collection:(name:string)=>({path:`${path}/${name}`,doc:(key:string)=>this.doc(`${path}/${name}/${key}`)}),set:async(value:any)=>{this.data.set(path,value);}};}
+  async runTransaction<T>(body:(tx:any)=>Promise<T>):Promise<T> {
+    let release!:()=>void;const previous=this.tail;this.tail=new Promise<void>(r=>{release=r});await previous;
+    const reads=(ref:any)=>({data:()=>this.data.get(ref.path)});
+    const tx={get:async(ref:any)=>reads(ref),getAll:async(...refs:any[])=>refs.map(reads),
+      set:(ref:any,value:any,options?:any)=>{const old=options?.merge?this.data.get(ref.path)??{}:{};const next={...old,...value};if(value.reservedTRY?.operand)next.reservedTRY=(old.reservedTRY??0)+value.reservedTRY.operand;this.data.set(ref.path,next)},delete:(ref:any)=>this.data.delete(ref.path)};
+    try{return await body(tx)}finally{release()}
+  }
+  async recursiveDelete(collection:any) {for(const key of this.data.keys())if(key.startsWith(collection.path+'/'))this.data.delete(key);}
+}
+const input = requestSchema.parse({schemaVersion:1,id:'27f937c4-bc4c-4e10-9a52-467039d8a428',consentVersion:'2026-10-03',
+  metrics:{distanceMeters:5000,elapsedSeconds:1600,movingSeconds:1500,averagePaceSecondsPerKm:300,averageHeartRate:145,maxHeartRate:160,activeEnergyKcal:400,elevationGainMeters:null,pacingCoefficientOfVariation:null,heartRateCoverage:0.8},
+  baseline:{comparableRunCount:0,averagePaceSecondsPerKm:null,averageHeartRate:null,paceChangePercent:null,vo2Max:null,previousVo2Max:null,recoveryBpm:null},
+  quality:{hasRoute:false,hasPauses:true,distanceSamplesAvailable:false,heartRateSamplesAvailable:true,isIndoor:false},splits:[]});
+const explanation:Explanation={summary:'A steady run.',insights:[{title:'Pace',detail:'Your recorded pace was steady.',evidence:['averagePaceSecondsPerKm']}],nextRun:'Keep a comfortable effort.'};
+function setup(options:{provider?:()=>Promise<Explanation>;monthlyTRY?:number}={}) {
+  const db=new Documents();let now=Date.parse('2026-10-03T12:00:00Z'),calls=0;
+  const store=new FirestoreStore(db as unknown as Firestore,{run:3,live:24,monthlyTRY:options.monthlyTRY??300,reservationTRY:1});
+  const deleted=new Set<string>();
+  const app=createApp({store,model:'test-model',now:()=>now,identity:{verify:async(token,check)=>{if(!['alice','bob'].includes(token)||check!=='valid'||deleted.has(token))throw new Error();return token},delete:async uid=>{deleted.add(uid)}},provider:{explain:async()=>{calls++;return options.provider ? options.provider():explanation;}}});
+  function send(body:any=input,user='alice',url='/v1/runs/analyze'){return app.inject({method:'POST',url,headers:{authorization:`Bearer ${user}`,'x-firebase-appcheck':'valid'},payload:body})}
+  return {app,db,store,send,clock:(value:number)=>{now+=value},calls:()=>calls,deleted};
+}
+test('requires both identity and App Check; health check is public',async()=>{const s=setup();assert.equal((await s.app.inject('/healthz')).statusCode,200);assert.equal((await s.app.inject({method:'POST',url:'/v1/runs/analyze',payload:input})).statusCode,401);assert.equal((await s.send(input,'stranger')).statusCode,401);await s.app.close()});
+test('rejects coordinates, unknown fields, wrong consent and impossible durations',async()=>{const s=setup();for(const value of [{...input,latitude:41},{...input,consentVersion:'old'},{...input,metrics:{...input.metrics,movingSeconds:2000}}])assert.equal((await s.send(value)).statusCode,400);assert.equal(s.calls(),0);await s.app.close()});
+test('caches identical requests per user and expires after 24 hours',async()=>{const s=setup();assert.equal((await s.send()).statusCode,200);assert.equal((await s.send()).statusCode,200);assert.equal(s.calls(),1);await s.send(input,'bob');assert.equal(s.calls(),2);s.clock(86400001);await s.send();assert.equal(s.calls(),3);await s.app.close()});
+test('concurrent duplicates reserve once',async()=>{let finish!:()=>void;const wait=new Promise<void>(r=>{finish=r});const s=setup({provider:async()=>{await wait;return explanation}});const first=s.send();await new Promise(r=>setTimeout(r,20));const second=await s.send();assert.equal(second.statusCode,409);finish();assert.equal((await first).statusCode,200);assert.equal(s.calls(),1);await s.app.close()});
+test('daily quota and global spending guard stop provider calls',async()=>{const s=setup();for(let i=0;i<3;i++)assert.equal((await s.send({...input,metrics:{...input.metrics,activeEnergyKcal:i}})).statusCode,200);assert.equal((await s.send()).statusCode,429);assert.equal(s.calls(),3);await s.app.close();const limited=setup({monthlyTRY:0});assert.equal((await limited.send()).statusCode,503);assert.equal(limited.calls(),0);await limited.app.close()});
+test('live interval and expiration enforced',async()=>{const s=setup();const result=await s.send(input,'alice','/v1/live/analyze');assert.equal(result.statusCode,200);assert.ok(result.json().expiresAt);s.clock(61_000);assert.equal((await s.send(input,'alice','/v1/live/analyze')).statusCode,429);s.clock(300_000);assert.equal((await s.send(input,'alice','/v1/live/analyze')).statusCode,200);await s.app.close()});
+test('provider failure, malformed output and missing evidence fail safely',async()=>{for(const provider of [async()=>{throw new Error('private upstream detail')},async()=>({text:'bad'} as unknown as Explanation),async()=>({...explanation,insights:[{title:'VO2',detail:'Invented.',evidence:['vo2Max'] as any}]})]) {const s=setup({provider});const result=await s.send();assert.equal(result.statusCode,503);assert.equal(result.json().error,'analysis_unavailable');assert.ok(!result.body.includes('private'));await s.app.close()}});
+test('account deletion removes only its data, rejects reuse and blocks in-flight writes',async()=>{const s=setup();await s.send();await s.send(input,'bob');assert.equal((await s.app.inject({method:'DELETE',url:'/v1/account',headers:{authorization:'Bearer alice','x-firebase-appcheck':'valid'}})).statusCode,204);assert.ok([...s.db.data.keys()].every(k=>!k.startsWith('users/alice/')));assert.ok([...s.db.data.keys()].some(k=>k.startsWith('users/bob/')));assert.equal((await s.send()).statusCode,401);await s.app.close();let finish!:()=>void;const pending=new Promise<void>(r=>{finish=r});const race=setup({provider:async()=>{await pending;return explanation}});const first=race.send();await new Promise(r=>setTimeout(r,20));await race.store.deleteAccount('alice');finish();assert.equal((await first).statusCode,401);assert.ok([...race.db.data.keys()].every(k=>!k.startsWith('users/alice/')));await race.app.close()});
+test('hash canonicalizes object key order and includes model and mode',()=>{assert.equal(inputHash(input,'run','a'),inputHash({...input,metrics:{...input.metrics}},'run','a'));assert.notEqual(inputHash(input,'run','a'),inputHash(input,'live','a'));assert.notEqual(inputHash(input,'run','a'),inputHash(input,'run','b'))});

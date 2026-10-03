@@ -1,0 +1,32 @@
+{
+  "name": "runner-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node node_modules/typescript/bin/tsc",
+    "start": "node dist/src/index.js",
+    "dev": "node --import tsx --watch src/index.ts",
+    "test": "node --import tsx --test test/*.test.ts",
+    "check": "node node_modules/typescript/bin/tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "fastify": "^5.0.0",
+    "firebase-admin": "^14.5.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.0"
+  },
+  "overrides": {
+    "gaxios": {
+      "uuid": "^11.1.1"
+    }
+  }
+}

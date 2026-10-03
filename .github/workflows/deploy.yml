@@ -1,0 +1,56 @@
+name: Validate and deploy Runner
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: runner-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/42099202530/locations/global/workloadIdentityPools/github/providers/runner-backend
+          service_account: runner-deploy@runner-mdo-production.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Build and push
+        run: |
+          gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+          docker build -t europe-west1-docker.pkg.dev/runner-mdo-production/runner/api:${{ github.sha }} .
+          docker push europe-west1-docker.pkg.dev/runner-mdo-production/runner/api:${{ github.sha }}
+      - name: Deploy
+        run: |
+          gcloud run deploy runner-api --project=runner-mdo-production --region=europe-west1 \
+            --image=europe-west1-docker.pkg.dev/runner-mdo-production/runner/api:${{ github.sha }} \
+            --service-account=runner-runtime@runner-mdo-production.iam.gserviceaccount.com \
+            --min-instances=0 --max-instances=2 --concurrency=20 --memory=256Mi --cpu=1 \
+            --timeout=60 --cpu-throttling \
+            --set-secrets=GEMINI_API_KEY=runner-gemini-api-key:1 \
+            --set-env-vars=GOOGLE_CLOUD_PROJECT=runner-mdo-production,FIREBASE_APP_ID=1:42099202530:ios:5582ad2e8f01b26c4ec1bb,GEMINI_MODEL=gemini-3.5-flash-lite,AI_MONTHLY_BUDGET_TRY=300,AI_RESERVATION_TRY=2,RUN_DAILY_LIMIT=3,LIVE_DAILY_LIMIT=24
+      - name: Verify health
+        run: |
+          endpoint=$(gcloud run services describe runner-api --project=runner-mdo-production --region=europe-west1 --format='value(status.url)')
+          curl --fail --retry 3 "$endpoint/health"
