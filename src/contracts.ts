@@ -21,6 +21,7 @@ const qualitySchema = z.object({
 }).strict();
 export const requestSchema = z.object({
   schemaVersion: z.literal(1), id: z.uuid(), consentVersion: z.literal('2026-10-03'),
+  language: z.enum(['en', 'de']).default('en'),
   metrics: metricsSchema, baseline: baselineSchema, quality: qualitySchema,
   splits: z.array(z.object({index: z.number().int().min(1).max(500), distanceMeters: finite(1609.35),
     movingSeconds: finite(7200), averageHeartRate: optional(250)}).strict()).max(500),
@@ -37,24 +38,26 @@ export const explanationSchema = z.object({
 }).strict();
 export type Explanation = z.infer<typeof explanationSchema>;
 export type AnalysisReport = {
+  language?: 'en' | 'de';
   schemaVersion: 1; id: string; status: 'complete'; metrics: AnalysisInput['metrics'];
   explanation: Explanation; endurance: {status: 'insufficient_data' | 'available'; detail: string};
   missingData: string[]; generatedAt: string; expiresAt?: string;
 };
 export function reportFor(input: AnalysisInput, explanation: Explanation, now: Date, live: boolean): AnalysisReport {
+  const text = (en: string, de: string) => input.language === 'de' ? de : en;
   const available = new Set<string>();
   for (const [key, value] of [...Object.entries(input.metrics),...Object.entries(input.baseline)]) if(value !== null) available.add(key);
   // A model cannot cite a measurement that was not supplied.
   if(explanation.insights.some(i => i.evidence.some(e => !available.has(e)))) throw new Error('invalid_evidence');
   const enough = input.baseline.comparableRunCount >= 5 && input.baseline.averageHeartRate !== null;
-  return {schemaVersion:1,id:input.id,status:'complete',metrics:input.metrics,explanation,
+  return {schemaVersion:1,language:input.language ?? 'en',id:input.id,status:'complete',metrics:input.metrics,explanation,
     endurance:{status:enough ? 'available':'insufficient_data',detail:enough
-      ? 'Comparison uses runs of similar distance and setting. Conditions and effort can affect pace and heart rate.'
-      : 'At least five comparable runs with heart-rate data are needed to assess a trend.'},
-    missingData:[...(!input.quality.hasRoute ? ['GPS route unavailable; numerical analysis remains available.']:[]),
-      ...(input.metrics.averageHeartRate === null ? ['Heart-rate data is unavailable.']:[]),
-      ...(input.metrics.heartRateCoverage < 0.5 ? ['Heart-rate coverage is sparse; interpret averages cautiously.']:[]),
-      ...(!input.baseline.vo2Max ? ['No recorded VO₂ max measurement.']:[]),
-      ...(!input.baseline.recoveryBpm ? ['No recorded heart-rate recovery measurement.']:[])],
+      ? text('Comparison uses runs of similar distance and setting. Conditions and effort can affect pace and heart rate.', 'Der Vergleich nutzt Läufe mit ähnlicher Distanz und Umgebung. Bedingungen und Belastung können Tempo und Herzfrequenz beeinflussen.')
+      : text('At least five comparable runs with heart-rate data are needed to assess a trend.', 'Für die Beurteilung eines Trends werden mindestens fünf vergleichbare Läufe mit Herzfrequenzdaten benötigt.')},
+    missingData:[...(!input.quality.hasRoute ? [text('GPS route unavailable; numerical analysis remains available.', 'Keine GPS-Route verfügbar; die numerische Analyse bleibt verfügbar.')]:[]),
+      ...(input.metrics.averageHeartRate === null ? [text('Heart-rate data is unavailable.', 'Herzfrequenzdaten sind nicht verfügbar.')]:[]),
+      ...(input.metrics.heartRateCoverage < 0.5 ? [text('Heart-rate coverage is sparse; interpret averages cautiously.', 'Wenige Herzfrequenzdaten; interpretiere Durchschnittswerte vorsichtig.')]:[]),
+      ...(!input.baseline.vo2Max ? [text('No recorded VO₂ max measurement.', 'Keine aufgezeichnete VO₂max-Messung.')]:[]),
+      ...(!input.baseline.recoveryBpm ? [text('No recorded heart-rate recovery measurement.', 'Keine aufgezeichnete Messung der Herzfrequenzerholung.')]:[])],
     generatedAt:now.toISOString(),...(live ? {expiresAt:new Date(now.getTime()+60_000).toISOString()}: {})};
 }

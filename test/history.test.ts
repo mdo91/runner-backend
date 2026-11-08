@@ -403,6 +403,21 @@ test("history contract rejects mismatched reports, duplicate IDs, oversized deta
     batch(1, [{ ...run, series: [{ t: 1900, heartRate: 145 }] }]),
   );
 });
+test("history preserves old reports and explicit German report language", async () => {
+  const report = {schemaVersion: 1, id: run.id, status: "complete", metrics: run.metrics,
+    explanation: {summary: "Steady run", insights: [], nextRun: "Keep it easy"},
+    endurance: {status: "insufficient_data", detail: "More runs needed"}, missingData: [],
+    generatedAt: "2026-10-03T12:00:00Z"};
+  assert.equal(batch(1, [{...run, report}]).runs[0]!.report?.language, undefined);
+  const german = {...report, language: "de", explanation: {...report.explanation, summary: "Gleichmäßiger Lauf"}};
+  const s = setup(), p = await s.history.configure("alice", true, true, s.now());
+  await s.history.sync("alice", batch(p.privacyRevision, [{...run, report: german}]), s.now());
+  const saved = (await s.history.detail("alice", run.id)).report;
+  assert.equal(saved?.language, "de");
+  assert.equal(saved?.explanation.summary, "Gleichmäßiger Lauf");
+  assert.throws(() => batch(1, [{...run, report: {...report, language: "fr"}}]));
+  await s.app.close();
+});
 test("clear cloud history disables sync and prevents stale restoration", async () => {
   const s = setup(),
     p = await s.history.configure("alice", true, true, s.now());
