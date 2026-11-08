@@ -1,3 +1,4 @@
+import { localize, dashboardLanguage, locale } from "./localization.js";
 type Metrics = {
   distanceMeters: number | null;
   elapsedSeconds: number;
@@ -49,6 +50,7 @@ type Run = Summary & {
   series: Series[];
   route: Route[] | null;
   report: {
+    language?: "en" | "de";
     explanation: {
       summary: string;
       insights: { title: string; detail: string; evidence: string[] }[];
@@ -70,7 +72,7 @@ const app = document.querySelector<HTMLDivElement>("#app")!;
 let runs: Summary[] = [],
   measurements: Measurement[] = [],
   prefs: Preferences = { enabled: false, gpsEnabled: false },
-  view = "Latest Run",
+  view = localize("Dashboard.Copy.latestRun.text"),
   unit = "metric",
   period = "all",
   selected: string | null = null,
@@ -103,7 +105,7 @@ function notice(text: string, error = false) {
   return el("div", text, "notice" + (error ? " error" : ""));
 }
 const date = (raw: string) =>
-  new Date(raw).toLocaleDateString(undefined, {
+  new Date(raw).toLocaleDateString(locale, {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -116,11 +118,11 @@ const duration = (seconds: number) => {
 };
 const scale = () => (unit === "metric" ? 1000 : 1609.344);
 const distance = (n: number | null) =>
-  n === null ? "—" : (n / scale()).toFixed(2);
+  n === null ? "—" : (n / scale()).toLocaleString(locale, {minimumFractionDigits:2,maximumFractionDigits:2});
 const pace = (n: number | null) =>
   n === null || n <= 0 ? "—" : duration((n * scale()) / 1000);
 const number = (n: number | null, precision = 0) =>
-  n === null ? "—" : n.toFixed(precision);
+  n === null ? "—" : n.toLocaleString(locale, {minimumFractionDigits:precision,maximumFractionDigits:precision});
 const distanceUnit = () => (unit === "metric" ? "km" : "mi");
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const result = await fetch("/v1/dashboard/" + path, {
@@ -134,15 +136,15 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
     if (result.status === 401) {
       session = false;
       throw new Error(
-        "Your session ended. Approve a new code in the iPhone app to sign in.",
+        localize("Dashboard.Copy.yourSessionEndedApproveANewCodeIn.text"),
       );
     }
     throw new Error(
       result.status === 429
-        ? "Please wait a minute and try again."
+        ? localize("Dashboard.Copy.pleaseWaitAMinuteAndTryAgain.text")
         : result.status === 404
-          ? "This run or sign-in code is no longer available."
-          : "The dashboard could not load. Check your connection and try again.",
+          ? localize("Dashboard.Copy.thisRunOrSignInCodeIsNo.text")
+          : localize("Dashboard.Copy.theDashboardCouldNotLoadCheckYourConnection.text"),
     );
   }
   return result.status === 204
@@ -163,24 +165,24 @@ function signIn(message?: string) {
   const box = el("main", undefined, "login");
   box.append(
     brand(),
-    el("h1", "Your runs. One place."),
+    el("h1", localize("Dashboard.Copy.yourRunsOnePlace.text")),
     el(
       "p",
-      "See the same measured performance as Runner on your iPhone, with your history, trends, and shared routes.",
+      localize("Dashboard.Copy.seeTheSameMeasuredPerformanceAsRunnerOn.text"),
       "subtle",
     ),
   );
   const panel = el("section", undefined, "panel");
   panel.append(
-    el("h2", "Sign in with your iPhone"),
+    el("h2", localize("Dashboard.Copy.signInWithYourIPhone.text")),
     el(
       "p",
-      "Sign in with Apple in Runner, then open Settings → Cloud history → Connect dashboard. Enter the code shown here and approve this browser.",
+      localize("Dashboard.Copy.signInWithAppleInRunnerThenOpen.text"),
       "subtle",
     ),
   );
   const b = button(
-    "Get a sign-in code",
+    localize("Dashboard.Copy.getASignInCode.text"),
     () => {
       void link(panel, b);
     },
@@ -192,7 +194,7 @@ function signIn(message?: string) {
     panel,
     el(
       "p",
-      "History and precise GPS uploads are separate opt-ins in the iPhone app. This browser never requests access to Apple Health.",
+      localize("Dashboard.Copy.historyAndPreciseGPSUploadsAreSeparateOpt.text"),
       "footer",
     ),
   );
@@ -200,7 +202,13 @@ function signIn(message?: string) {
 }
 function brand() {
   const b = el("div", undefined, "brand");
-  b.append(el("span", "R", "mark"), el("span", "Runner"));
+  b.append(el("span", "R", "mark"), el("span", localize("Dashboard.Copy.runner.text")));
+  const language = el("a", dashboardLanguage === "de" ? "English" : "Deutsch");
+  const destination = new URL(location.href);
+  destination.searchParams.set("lang", dashboardLanguage === "de" ? "en" : "de");
+  language.href = destination.toString();
+  language.hreflang = dashboardLanguage === "de" ? "en" : "de";
+  b.append(language);
   return b;
 }
 async function link(panel: HTMLElement, b: HTMLButtonElement) {
@@ -213,16 +221,16 @@ async function link(panel: HTMLElement, b: HTMLButtonElement) {
     );
     if (version !== generation) return;
     panel.replaceChildren(
-      el("h2", "Approve this browser in Runner"),
+      el("h2", localize("Dashboard.Copy.approveThisBrowserInRunner.text")),
       el("div", pair.code.slice(0, 5) + " " + pair.code.slice(5), "code"),
       el(
         "p",
-        "Open Connect dashboard on your iPhone and enter this code. Approve only if you requested this sign-in.",
+        localize("Dashboard.Copy.openConnectDashboardOnYourIPhoneAndEnter.text"),
         "subtle",
       ),
       el(
         "p",
-        "Code expires in 10 minutes. Waiting for approval…",
+        localize("Dashboard.Copy.codeExpiresIn10MinutesWaitingForApproval.text"),
         "small subtle",
       ),
     );
@@ -230,7 +238,7 @@ async function link(panel: HTMLElement, b: HTMLButtonElement) {
       if (version !== generation) return;
       try {
         if (Date.now() >= Date.parse(pair.expiresAt))
-          throw new Error("The code expired. Get a new code to continue.");
+          throw new Error(localize("Dashboard.Copy.theCodeExpiredGetANewCodeTo.text"));
         const result = await api<{ status: string }>("link/poll", {
           code: pair.code,
           secret: pair.secret,
@@ -257,7 +265,7 @@ async function link(panel: HTMLElement, b: HTMLButtonElement) {
 }
 async function load() {
   const version = ++generation;
-  app.replaceChildren(el("main", "Loading your running history…", "loading"));
+  app.replaceChildren(el("main", localize("Dashboard.Copy.loadingYourRunningHistory.text"), "loading"));
   try {
     const all: Summary[] = [],
       ms: Measurement[] = [];
@@ -276,7 +284,7 @@ async function load() {
       ms.push(...page.measurements);
       prefs = page.preferences;
       cursor = page.nextCursor;
-      app.firstElementChild!.textContent = `Loaded ${all.length} runs…`;
+      app.firstElementChild!.textContent = localize("Dashboard.Format.loadedRuns.text", all.length);
     } while (cursor);
     runs = all.sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
     hasLoaded = true;
@@ -291,7 +299,7 @@ async function load() {
     else {
       app.replaceChildren(
         notice((error as Error).message, true),
-        button("Retry", () => {
+        button(localize("Dashboard.Copy.retry.text"), () => {
           void load();
         }),
       );
@@ -327,9 +335,9 @@ function render() {
   const shell = el("div", undefined, "shell"),
     side = el("aside", undefined, "sidebar"),
     nav = el("nav");
-  nav.setAttribute("aria-label", "Dashboard");
+  nav.setAttribute("aria-label", localize("Dashboard.Copy.dashboard.text"));
   side.append(brand());
-  for (const item of ["Latest Run", "History", "Trends", "Routes"]) {
+  for (const item of [localize("Dashboard.Copy.latestRun.text"), localize("Dashboard.Copy.history.text"), localize("Dashboard.Copy.trends.text"), localize("Dashboard.Copy.routes.text")]) {
     const b = button(
       item,
       () => {
@@ -347,8 +355,8 @@ function render() {
     el(
       "div",
       prefs.enabled
-        ? "History sync enabled on iPhone."
-        : "History sync paused. Saved data remains available.",
+        ? localize("Dashboard.Copy.historySyncEnabledOnIPhone.text")
+        : localize("Dashboard.Copy.historySyncPausedSavedDataRemainsAvailable.text"),
       "sidefooter",
     ),
   );
@@ -357,23 +365,23 @@ function render() {
     head = el("header", undefined, "topbar"),
     title = el("div");
   title.append(
-    el("div", "RUNNER / YOUR PERFORMANCE", "eyebrow"),
-    el("h1", selected ? "Run details" : view),
+    el("div", localize("Dashboard.Copy.rUNNERYOURPERFORMANCE.text"), "eyebrow"),
+    el("h1", selected ? localize("Dashboard.Copy.runDetails.text") : view),
     el(
       "p",
-      view === "Latest Run"
-        ? "Your latest imported run, measured from Apple Health."
-        : "A clearer view of the work you’ve put in.",
+      view === localize("Dashboard.Copy.latestRun.text")
+        ? localize("Dashboard.Copy.yourLatestImportedRunMeasuredFromAppleHealth.text")
+        : localize("Dashboard.Copy.aClearerViewOfTheWorkYouVe.text"),
       "subtle",
     ),
   );
   const actions = el("div", undefined, "row");
   actions.append(
     selector(
-      "Units",
+      localize("Dashboard.Copy.units.text"),
       [
-        ["metric", "Kilometers"],
-        ["imperial", "Miles"],
+        ["metric", localize("Dashboard.Copy.kilometers.text")],
+        ["imperial", localize("Dashboard.Copy.miles.text")],
       ],
       unit,
       (v) => {
@@ -381,11 +389,11 @@ function render() {
         render();
       },
     ),
-    button("Refresh", () => {
+    button(localize("Dashboard.Copy.refresh.text"), () => {
       details.clear();
       void load();
     }),
-    button("Sign out", () => {
+    button(localize("Dashboard.Copy.signOut.text"), () => {
       void api("logout", {})
         .then(() => signIn())
         .catch((error) =>
@@ -400,25 +408,25 @@ function render() {
   if (!prefs.enabled)
     body.append(
       notice(
-        "Sync is paused. Enable “Sync running history” in Runner’s Settings to upload new workouts.",
+        localize("Dashboard.Copy.syncIsPausedEnableSyncRunningHistoryIn.text"),
       ),
     );
   if (!runs.length) {
     body.append(
       el(
         "div",
-        "No synced runs yet. In the iPhone app, sign in with Apple, consent to history sync, and import your Apple Health workouts. GPS sharing is optional.",
+        localize("Dashboard.Copy.noSyncedRunsYetInTheIPhoneApp.text"),
         "empty",
       ),
     );
-  } else if (selected || view === "Latest Run") {
+  } else if (selected || view === localize("Dashboard.Copy.latestRun.text")) {
     if (selected)
       body.append(
         button(
-          "← Back to history",
+          localize("Dashboard.Copy.backToHistory.text"),
           () => {
             selected = null;
-            view = "History";
+            view = localize("Dashboard.Copy.history.text");
             render();
           },
           "back",
@@ -428,12 +436,12 @@ function render() {
   } else {
     body.append(
       selector(
-        "Date range",
+        localize("Dashboard.Copy.dateRange.text"),
         [
-          ["all", "All history"],
-          ["30", "Last 30 days"],
-          ["90", "Last 90 days"],
-          ["365", "Last year"],
+          ["all", localize("Dashboard.Copy.allHistory.text")],
+          ["30", localize("Dashboard.Copy.last30Days.text")],
+          ["90", localize("Dashboard.Copy.last90Days.text")],
+          ["365", localize("Dashboard.Copy.lastYear.text")],
         ],
         period,
         (v) => {
@@ -442,14 +450,14 @@ function render() {
         },
       ),
     );
-    if (view === "History") showHistory(body);
-    else if (view === "Trends") showTrends(body);
+    if (view === localize("Dashboard.Copy.history.text")) showHistory(body);
+    else if (view === localize("Dashboard.Copy.trends.text")) showTrends(body);
     else showRoutes(body);
   }
   content.append(
     el(
       "footer",
-      "HealthKit provides the recorded measurements. Missing values stay unavailable. AI reports are fitness coaching, not a medical diagnosis. Routes are rendered locally in this browser without sending coordinates to a map provider.",
+      localize("Dashboard.Copy.healthKitProvidesTheRecordedMeasurementsMissingValuesStay.text"),
       "footer",
     ),
   );
@@ -506,22 +514,22 @@ function showHistory(body: HTMLElement) {
   const total = list.reduce((n, r) => n + (r.metrics.distanceMeters ?? 0), 0),
     moving = list.reduce((n, r) => n + r.metrics.movingSeconds, 0);
   cards.append(
-    card("Runs", String(list.length)),
-    card("Recorded distance", distance(total), distanceUnit()),
-    card("Moving time", duration(moving)),
-    card("Route recordings", String(list.filter((r) => r.hasRoute).length)),
+    card(localize("Dashboard.Copy.runs.text"), String(list.length)),
+    card(localize("Dashboard.Copy.recordedDistance.text"), distance(total), distanceUnit()),
+    card(localize("Dashboard.Copy.movingTime.text"), duration(moving)),
+    card(localize("Dashboard.Copy.routeRecordings.text"), String(list.filter((r) => r.hasRoute).length)),
   );
   body.append(cards);
-  const p = panel("Running history");
+  const p = panel(localize("Dashboard.Copy.runningHistory.text"));
   p.append(
     table(
       [
-        "Run",
-        "Distance",
-        "Moving time",
-        "Pace / " + distanceUnit(),
-        "Heart rate",
-        "Source",
+        localize("Dashboard.Copy.run.text"),
+        localize("Dashboard.Copy.distance.text"),
+        localize("Dashboard.Copy.movingTime.text"),
+        localize("Dashboard.Copy.pace.text") + distanceUnit(),
+        localize("Dashboard.Copy.heartRate.text"),
+        localize("Dashboard.Copy.source.text"),
       ],
       list.map((r) => [
         button(date(r.start), () => {
@@ -534,7 +542,7 @@ function showHistory(body: HTMLElement) {
         number(r.metrics.averageHeartRate) + " bpm",
         r.source + (r.indoor ? " · Indoor" : ""),
       ]),
-      `${list.length} runs in this range. Select a date to view the full run.`,
+      localize("Dashboard.Format.rangeRuns.text", list.length),
     ),
   );
   body.append(p);
@@ -545,12 +553,12 @@ async function getRun(id: string) {
   if (cached) return cached;
   const r = await api<Run>("runs/" + encodeURIComponent(id));
   if (version !== generation)
-    throw new Error("Your session changed. Reload this view.");
+    throw new Error(localize("Dashboard.Copy.yourSessionChangedReloadThisView.text"));
   details.set(id, r);
   return r;
 }
 async function showRun(id: string, body: HTMLElement) {
-  const placeholder = el("p", "Loading run details…", "subtle");
+  const placeholder = el("p", localize("Dashboard.Copy.loadingRunDetails.text"), "subtle");
   body.append(placeholder);
   try {
     const r = await getRun(id);
@@ -559,109 +567,109 @@ async function showRun(id: string, body: HTMLElement) {
     body.append(
       el(
         "div",
-        date(r.start) + " · " + r.source + (r.indoor ? " · Indoor run" : ""),
+        date(r.start) + " · " + r.source + (r.indoor ? localize("Dashboard.Copy.indoorRun.text") : ""),
         "subtle",
       ),
     );
     const cards = el("div", undefined, "cards");
     cards.append(
-      card("Distance", distance(r.metrics.distanceMeters), distanceUnit()),
+      card(localize("Dashboard.Copy.distance.text"), distance(r.metrics.distanceMeters), distanceUnit()),
       card(
-        "Moving time",
+        localize("Dashboard.Copy.movingTime.text"),
         duration(r.metrics.movingSeconds),
         "",
-        `Elapsed ${duration(r.metrics.elapsedSeconds)}`,
+        localize("Dashboard.Format.elapsed.text", duration(r.metrics.elapsedSeconds)),
       ),
       card(
-        "Average pace",
+        localize("Dashboard.Copy.averagePace.text"),
         pace(r.metrics.averagePaceSecondsPerKm),
         "/ " + distanceUnit(),
       ),
       card(
-        "Average heart rate",
+        localize("Dashboard.Copy.averageHeartRate.text"),
         number(r.metrics.averageHeartRate),
-        "bpm",
-        `${Math.round(r.metrics.heartRateCoverage * 100)}% recorded coverage`,
+        localize("Dashboard.Copy.bpm.text"),
+        localize("Dashboard.Format.coverage.text", Math.round(r.metrics.heartRateCoverage * 100)),
       ),
     );
     body.append(cards);
     const grid = el("div", undefined, "grid"),
-      heart = panel("Heart rate"),
-      pacing = panel("Pace");
+      heart = panel(localize("Dashboard.Copy.heartRate.text")),
+      pacing = panel(localize("Dashboard.Copy.pace2.text"));
     heart.append(
       chart(
         r.series.map((p) => ({ x: p.t / 60, y: p.heartRate })),
         (v) => number(v) + " bpm",
-        "Minutes into run",
-        "Recorded heart rate during this run",
+        localize("Dashboard.Copy.minutesIntoRun.text"),
+        localize("Dashboard.Copy.recordedHeartRateDuringThisRun.text"),
       ),
     );
     pacing.append(
       chart(
         r.series.map((p) => ({ x: p.t / 60, y: p.paceSecondsPerKm })),
         pace,
-        "Minutes into run",
-        "Recorded pace during this run",
+        localize("Dashboard.Copy.minutesIntoRun.text"),
+        localize("Dashboard.Copy.recordedPaceDuringThisRun.text"),
         true,
       ),
     );
     grid.append(heart, pacing);
-    const route = panel("Route"),
+    const route = panel(localize("Dashboard.Copy.route.text")),
       mapBox = el("div");
     route.append(mapBox);
     if (r.route?.length)
       route.append(
         selector(
-          "Color by",
+          localize("Dashboard.Copy.colorBy.text"),
           [
-            ["pace", "Pace"],
-            ["heart", "Heart rate"],
+            ["pace", localize("Dashboard.Copy.pace2.text")],
+            ["heart", localize("Dashboard.Copy.heartRate.text")],
           ],
           "pace",
           (v) => drawRoute(r, mapBox, v),
         ),
       );
     drawRoute(r, mapBox, "pace");
-    const stats = panel("Performance");
+    const stats = panel(localize("Dashboard.Copy.performance.text"));
     stats.append(
       table(
-        ["Measurement", "Recorded value"],
+        [localize("Dashboard.Copy.measurement.text"), localize("Dashboard.Copy.recordedValue.text")],
         [
-          ["Active energy", number(r.metrics.activeEnergyKcal) + " kcal"],
+          [localize("Dashboard.Copy.activeEnergy.text"), number(r.metrics.activeEnergyKcal) + " kcal"],
           [
-            "Elevation gain",
+            localize("Dashboard.Copy.elevationGain.text"),
             r.metrics.elevationGainMeters === null
               ? "—"
               : unit === "metric"
                 ? number(r.metrics.elevationGainMeters) + " m"
                 : number(r.metrics.elevationGainMeters * 3.28084) + " ft",
           ],
-          ["Maximum heart rate", number(r.metrics.maxHeartRate) + " bpm"],
+          [localize("Dashboard.Copy.maximumHeartRate.text"), number(r.metrics.maxHeartRate) + " bpm"],
           [
-            "Pacing variation",
+            localize("Dashboard.Copy.pacingVariation.text"),
             r.metrics.pacingCoefficientOfVariation === null
-              ? "Insufficient splits"
-              : (r.metrics.pacingCoefficientOfVariation * 100).toFixed(1) + "%",
+              ? localize("Dashboard.Copy.insufficientSplits.text")
+              : number(r.metrics.pacingCoefficientOfVariation * 100, 1) + "%",
           ],
           [
-            "Heart-rate coverage",
-            (r.metrics.heartRateCoverage * 100).toFixed(0) + "%",
+            localize("Dashboard.Copy.heartRateCoverage.text"),
+            number(r.metrics.heartRateCoverage * 100) + "%",
           ],
         ],
       ),
     );
     grid.append(route, stats);
     body.append(grid);
-    const splits = panel("Splits");
+    const splits = panel(localize("Dashboard.Copy.splits.text"));
     if (r.splits.length)
       splits.append(
         table(
           [
-            "Split",
-            "Distance",
-            "Moving time",
-            "Pace / " + distanceUnit(),
-            "Heart rate",
+            localize("Dashboard.Copy.split.text"),
+            localize("Dashboard.Copy.distance.text"),
+            localize("Dashboard.Copy.movingTime.text"),
+            localize("Dashboard.Copy.pace.text") + distanceUnit(),
+            localize("Dashboard.Copy.heartRate.text"),
           ],
           r.splits.map((s) => [
             String(s.index),
@@ -674,24 +682,24 @@ async function showRun(id: string, body: HTMLElement) {
             ),
             number(s.averageHeartRate) + " bpm",
           ]),
-          "Measured kilometer splits, displayed in your selected units.",
+          localize("Dashboard.Copy.measuredKilometerSplitsDisplayedInYourSelectedUnits.text"),
         ),
       );
     else
       splits.append(
         el(
           "p",
-          "Distance samples are not available to calculate splits.",
+          localize("Dashboard.Copy.distanceSamplesAreNotAvailableToCalculateSplits.text"),
           "subtle",
         ),
       );
     body.append(splits);
     const dynamic = el("div", undefined, "grid");
     for (const [key, label, suffix, factor] of [
-      ["powerWatts", "Running power", "W", 1],
-      ["strideMeters", "Stride length", "m", 1],
-      ["groundContactMilliseconds", "Ground contact", "ms", 1],
-      ["verticalOscillationMeters", "Vertical oscillation", "cm", 100],
+      ["powerWatts", localize("Dashboard.Copy.runningPower.text"), "W", 1],
+      ["strideMeters", localize("Dashboard.Copy.strideLength.text"), "m", 1],
+      ["groundContactMilliseconds", localize("Dashboard.Copy.groundContact.text"), "ms", 1],
+      ["verticalOscillationMeters", localize("Dashboard.Copy.verticalOscillation.text"), "cm", 100],
     ] as const) {
       if (!r.series.some((p) => p[key] !== null)) continue;
       const p = panel(label);
@@ -701,31 +709,32 @@ async function showRun(id: string, body: HTMLElement) {
             x: p.t / 60,
             y: p[key] === null ? null : p[key]! * factor,
           })),
-          (v) => number(v, label === "Stride length" ? 2 : 0) + " " + suffix,
-          "Minutes into run",
+          (v) => number(v, label === localize("Dashboard.Copy.strideLength.text") ? 2 : 0) + " " + suffix,
+          localize("Dashboard.Copy.minutesIntoRun.text"),
           label,
         ),
       );
       dynamic.append(p);
     }
     if (dynamic.childElementCount) body.append(dynamic);
-    const ai = panel("Run assessment");
+    const ai = panel(localize("Dashboard.Copy.runAssessment.text"));
     if (r.report) {
+      if ((r.report.language ?? "en") !== dashboardLanguage) ai.append(el("p", localize("Dashboard.Analysis.languageNotice.text"), "small subtle"));
       ai.append(el("p", r.report.explanation.summary, "subtle"));
       for (const insight of r.report.explanation.insights) {
         const block = el("div", undefined, "ai-insight");
         block.append(
           el("h3", insight.title),
           el("p", insight.detail),
-          el("p", "Based on: " + insight.evidence.join(", "), "small subtle"),
+          el("p", localize("Dashboard.Copy.basedOn.text") + insight.evidence.map(evidenceLabel).join(", "), "small subtle"),
         );
         ai.append(block);
       }
       ai.append(
         el("p", r.report.endurance.detail, "subtle"),
-        el("h3", "Next run"),
+        el("h3", localize("Dashboard.Copy.nextRun.text")),
         el("p", r.report.explanation.nextRun, "subtle"),
-        el("p", "AI report · " + date(r.report.generatedAt), "small subtle"),
+        el("p", localize("Dashboard.Copy.aIReport.text") + date(r.report.generatedAt), "small subtle"),
       );
       for (const missing of r.report.missingData)
         ai.append(el("p", missing, "small subtle"));
@@ -733,30 +742,30 @@ async function showRun(id: string, body: HTMLElement) {
       ai.append(
         el(
           "p",
-          "No AI report has been synced for this run. You can request one in Runner on your iPhone with AI consent. Your measured stats remain available here.",
+          localize("Dashboard.Copy.noAIReportHasBeenSyncedForThis.text"),
           "subtle",
         ),
       );
     body.append(ai);
     const disclosure = el("details", undefined, "details");
     disclosure.append(
-      el("summary", "View chart data"),
+      el("summary", localize("Dashboard.Copy.viewChartData.text")),
       table(
         [
-          "Minutes",
-          "Heart rate (bpm)",
-          "Pace / " + distanceUnit(),
-          "Power (W)",
-          "Stride (m)",
+          localize("Dashboard.Copy.minutes.text"),
+          localize("Dashboard.Copy.heartRateBpm.text"),
+          localize("Dashboard.Copy.pace.text") + distanceUnit(),
+          localize("Dashboard.Copy.powerW.text"),
+          localize("Dashboard.Copy.strideM.text"),
         ],
         r.series.map((p) => [
-          (p.t / 60).toFixed(1),
+          number(p.t / 60, 1),
           number(p.heartRate),
           pace(p.paceSecondsPerKm),
           number(p.powerWatts),
           number(p.strideMeters, 2),
         ]),
-        "Charts use time-binned summaries. Gaps indicate unavailable data.",
+        localize("Dashboard.Copy.chartsUseTimeBinnedSummariesGapsIndicateUnavailable.text"),
       ),
     );
     body.append(disclosure);
@@ -782,7 +791,7 @@ function chart(
         p.y !== null && Number.isFinite(p.y),
     );
   if (!valid.length) {
-    container.append(el("p", "No recorded measurements available.", "empty"));
+    container.append(el("p", localize("Dashboard.Copy.noRecordedMeasurementsAvailable.text"), "empty"));
     return container;
   }
   const w = 560,
@@ -836,7 +845,7 @@ function chart(
   for (const p of valid) {
     const dot = svg("circle", { cx: X(p.x), cy: Y(p.y), r: 3, class: "dot" }),
       t = svg("title");
-    t.textContent = `${xLabel.startsWith("Run") ? date(new Date(p.x).toISOString()) : p.x.toFixed(1)}: ${format(p.y)}`;
+    t.textContent = `${xLabel.startsWith(localize("Dashboard.Copy.run.text")) ? date(new Date(p.x).toISOString()) : number(p.x, 1)}: ${format(p.y)}`;
     dot.append(t);
     s.append(dot);
   }
@@ -848,12 +857,12 @@ function chart(
     [w - 18, "end", maxX],
   ] as const) {
     const tick = svg("text", { x, y: h - 27, "text-anchor": anchor });
-    tick.textContent = xLabel.includes("dates")
-      ? new Date(value).toLocaleDateString(undefined, {
+    tick.textContent = (xLabel === localize("Dashboard.Copy.runDates.text") || xLabel === localize("Dashboard.Copy.runMeasurementDates.text"))
+      ? new Date(value).toLocaleDateString(locale, {
           day: "numeric",
           month: "short",
         })
-      : value.toFixed(0) + " min";
+      : number(value) + " min";
     s.append(tick);
   }
   container.append(s);
@@ -891,13 +900,13 @@ function showTrends(body: HTMLElement) {
         change = ((m.averagePaceSecondsPerKm - average) / average) * 100;
       body.append(
         notice(
-          `${Math.abs(change).toFixed(1)}% ${change < 0 ? "faster" : "slower"} pace than ${matches.length} prior runs of similar distance, setting, and heart rate. Weather, terrain, and effort still influence this comparison.`,
+          localize("Dashboard.Format.paceComparison.text", number(Math.abs(change), 1), change < 0 ? localize("Dashboard.Copy.faster.text") : localize("Dashboard.Copy.slower.text"), matches.length),
         ),
       );
     } else
       body.append(
         notice(
-          `Building your baseline. At least five comparable runs with sufficient heart-rate coverage are needed before showing a pace trend. You have ${matches.length}.`,
+          localize("Dashboard.Format.baseline.text", matches.length),
         ),
       );
   }
@@ -906,14 +915,14 @@ function showTrends(body: HTMLElement) {
   for (const [key, label, format, invert] of [
     [
       "distanceMeters",
-      "Distance",
+      localize("Dashboard.Copy.distance.text"),
       (n: number | null) => distance(n) + " " + distanceUnit(),
       false,
     ],
-    ["averagePaceSecondsPerKm", "Average pace", pace, true],
+    ["averagePaceSecondsPerKm", localize("Dashboard.Copy.averagePace.text"), pace, true],
     [
       "averageHeartRate",
-      "Average heart rate",
+      localize("Dashboard.Copy.averageHeartRate.text"),
       (n: number | null) => number(n) + " bpm",
       false,
     ],
@@ -923,14 +932,14 @@ function showTrends(body: HTMLElement) {
       chart(
         list.map((r) => ({ x: Date.parse(r.start), y: r.metrics[key] })),
         format,
-        "Run dates",
-        label + " across runs",
+        localize("Dashboard.Copy.runDates.text"),
+        label + localize("Dashboard.Copy.acrossRuns.text"),
         invert,
       ),
     );
     grid.append(p);
   }
-  const endurance = panel("Cardiovascular endurance"),
+  const endurance = panel(localize("Dashboard.Copy.cardiovascularEndurance.text")),
     ms = measurements.filter(
       (m) =>
         m.kind === "vo2Max" &&
@@ -941,23 +950,23 @@ function showTrends(body: HTMLElement) {
     chart(
       ms.map((m) => ({ x: Date.parse(m.measuredAt), y: m.value })),
       (v) => number(v, 1),
-      "Run / measurement dates",
-      "Recorded VO₂ max measurements",
+      localize("Dashboard.Copy.runMeasurementDates.text"),
+      localize("Dashboard.Copy.recordedVOMaxMeasurements.text"),
     ),
   );
   endurance.append(
     el(
       "p",
-      "VO₂ max and one-minute recovery are shown only when Apple Health recorded them. Different conditions can change pace and heart rate; a single run does not establish an endurance trend.",
+      localize("Dashboard.Copy.vOMaxAndOneMinuteRecoveryAreShown.text"),
       "small subtle",
     ),
   );
   grid.append(endurance);
   body.append(grid);
-  const dates = panel("Dated endurance measurements");
+  const dates = panel(localize("Dashboard.Copy.datedEnduranceMeasurements.text"));
   dates.append(
     table(
-      ["Date", "Measurement", "Value"],
+      [localize("Dashboard.Copy.date.text"), localize("Dashboard.Copy.measurement.text"), localize("Dashboard.Copy.value.text")],
       measurements
         .filter(
           (m) =>
@@ -968,7 +977,7 @@ function showTrends(body: HTMLElement) {
         .reverse()
         .map((m) => [
           date(m.measuredAt),
-          m.kind === "vo2Max" ? "VO₂ max" : "One-minute heart-rate recovery",
+          m.kind === "vo2Max" ? localize("Dashboard.Copy.vOMax.text") : localize("Dashboard.Copy.oneMinuteHeartRateRecovery.text"),
           number(m.value, 1) + (m.kind === "vo2Max" ? " ml/kg/min" : " bpm"),
         ]),
     ),
@@ -1018,15 +1027,15 @@ function drawRoute(r: Run, box: HTMLElement, mode: string) {
       el(
         "p",
         prefs.gpsEnabled
-          ? "No route available for this run. Indoor workouts and runs without GPS still show their recorded measurements."
-          : "GPS sharing is off. Enable the separate GPS consent in the iPhone app to see routes here.",
+          ? localize("Dashboard.Copy.noRouteAvailableForThisRunIndoorWorkouts.text")
+          : localize("Dashboard.Copy.gPSSharingIsOffEnableTheSeparateGPS.text"),
         "empty",
       ),
     );
     return;
   }
   const points = r.route,
-    { s, project } = routeSurface(points, "Running route colored by " + mode),
+    { s, project } = routeSurface(points, localize("Dashboard.Copy.runningRouteColoredBy.text") + (mode === "heart" ? localize("Dashboard.Copy.heartRate.text") : localize("Dashboard.Copy.pace.text"))),
     values = points
       .map((p) => (mode === "heart" ? p.heartRate : p.paceSecondsPerKm))
       .filter((n): n is number => n !== null && n > 0),
@@ -1056,8 +1065,8 @@ function drawRoute(r: Run, box: HTMLElement, mode: string) {
     );
   }
   for (const [p, label, c] of [
-    [points[0]!, "Start", "#74d6ae"],
-    [points.at(-1)!, "End", "#f2b468"],
+    [points[0]!, localize("Dashboard.Copy.start.text"), "#74d6ae"],
+    [points.at(-1)!, localize("Dashboard.Copy.end.text"), "#f2b468"],
   ] as const) {
     const a = project(p),
       dot = svg("circle", {
@@ -1082,7 +1091,7 @@ function drawRoute(r: Run, box: HTMLElement, mode: string) {
         ? mode === "heart"
           ? number(min) + " bpm"
           : pace(min) + " / " + distanceUnit()
-        : "Unavailable",
+        : localize("Dashboard.Copy.unavailable.text"),
     ),
     el("span", undefined, "gradient"),
     el(
@@ -1091,26 +1100,26 @@ function drawRoute(r: Run, box: HTMLElement, mode: string) {
         ? mode === "heart"
           ? number(max) + " bpm"
           : pace(max) + " / " + distanceUnit()
-        : "Unavailable",
+        : localize("Dashboard.Copy.unavailable.text"),
     ),
-    el("span", "Green marker: start · Amber: end · Gray: missing data"),
+    el("span", localize("Dashboard.Copy.greenMarkerStartAmberEndGrayMissingData.text")),
   );
   box.append(
     legend,
     el(
       "p",
-      "Route shape · Paths are simplified; GPS gaps and pauses are kept separate.",
+      localize("Dashboard.Copy.routeShapePathsAreSimplifiedGPSGapsAnd.text"),
       "small subtle",
     ),
   );
 }
 function showRoutes(body: HTMLElement) {
-  const p = panel("Where you run"),
+  const p = panel(localize("Dashboard.Copy.whereYouRun.text")),
     box = el("div");
   p.append(
     el(
       "p",
-      "A history density map counts each route traversal once per 100-meter cell, so stationary GPS samples do not inflate popular areas.",
+      localize("Dashboard.Copy.aHistoryDensityMapCountsEachRouteTraversal.text"),
       "subtle",
     ),
     box,
@@ -1119,7 +1128,7 @@ function showRoutes(body: HTMLElement) {
   if (!prefs.gpsEnabled) {
     box.append(
       notice(
-        "GPS sharing is off. Routes stay on your iPhone unless you separately consent to upload them.",
+        localize("Dashboard.Copy.gPSSharingIsOffRoutesStayOnYour.text"),
       ),
     );
     return;
@@ -1128,14 +1137,14 @@ function showRoutes(body: HTMLElement) {
   box.append(
     el(
       "p",
-      `${list.length} shared routes in this range. Load a page of up to 100 routes to explore their density.`,
+      localize("Dashboard.Format.sharedRoutes.text", list.length),
       "subtle",
     ),
   );
   let next = 0;
   const loaded: Run[] = [];
   const b = button(
-    "Load route map",
+    localize("Dashboard.Copy.loadRouteMap.text"),
     () => {
       void update();
     },
@@ -1154,7 +1163,7 @@ function showRoutes(body: HTMLElement) {
       }
       map.replaceChildren(density(loaded));
       b.textContent =
-        next < list.length ? "Load next 100 routes" : "All routes loaded";
+        next < list.length ? localize("Dashboard.Copy.loadNext100Routes.text") : localize("Dashboard.Copy.allRoutesLoaded.text");
       b.disabled = next >= list.length;
     } catch (error) {
       map.append(notice((error as Error).message, true));
@@ -1167,12 +1176,12 @@ function density(records: Run[]) {
   const box = el("div"),
     points = records.flatMap((r) => r.route ?? []);
   if (!points.length) {
-    box.append(el("p", "No routes available.", "empty"));
+    box.append(el("p", localize("Dashboard.Copy.noRoutesAvailable.text"), "empty"));
     return box;
   }
   const { s, project } = routeSurface(
       points,
-      "History density of route traversals",
+      localize("Dashboard.Copy.historyDensityOfRouteTraversals.text"),
     ),
     lat = points[0]!.latitude,
     cos = Math.cos((lat * Math.PI) / 180),
@@ -1234,7 +1243,7 @@ function density(records: Run[]) {
         opacity: 0.7,
       }),
       title = svg("title");
-    title.textContent = c.count + " route traversals";
+    title.textContent = c.count + localize("Dashboard.Copy.routeTraversals.text");
     circle.append(title);
     s.append(circle);
   }
@@ -1242,10 +1251,64 @@ function density(records: Run[]) {
     s,
     el(
       "p",
-      `${records.length} routes loaded · Blue: fewer traversals · Amber: more · Each cell is approximately 100 meters.`,
+      localize("Dashboard.Format.loadedRoutes.text", records.length),
       "legend",
     ),
   );
   return box;
 }
 void load();
+
+function evidenceLabel(key: string): string {
+  const labels: Record<string, [string, string]> = {
+  "distanceMeters": [
+    "distance",
+    "Distanz"
+  ],
+  "movingSeconds": [
+    "moving time",
+    "Bewegungszeit"
+  ],
+  "averagePaceSecondsPerKm": [
+    "average pace",
+    "Durchschnittstempo"
+  ],
+  "averageHeartRate": [
+    "average heart rate",
+    "durchschnittliche Herzfrequenz"
+  ],
+  "maxHeartRate": [
+    "maximum heart rate",
+    "maximale Herzfrequenz"
+  ],
+  "pacingCoefficientOfVariation": [
+    "pacing variation",
+    "Temposchwankung"
+  ],
+  "heartRateCoverage": [
+    "heart-rate coverage",
+    "Herzfrequenzabdeckung"
+  ],
+  "comparableRunCount": [
+    "comparable runs",
+    "vergleichbare Läufe"
+  ],
+  "paceChangePercent": [
+    "pace change",
+    "Tempoänderung"
+  ],
+  "vo2Max": [
+    "recorded VO₂ max",
+    "aufgezeichnete VO₂max"
+  ],
+  "previousVo2Max": [
+    "previous VO₂ max",
+    "vorherige VO₂max"
+  ],
+  "recoveryBpm": [
+    "heart-rate recovery",
+    "Herzfrequenzerholung"
+  ]
+};
+  return labels[key]?.[dashboardLanguage === "de" ? 1 : 0] ?? (dashboardLanguage === "de" ? "Messwert" : "measurement");
+}

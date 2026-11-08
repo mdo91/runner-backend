@@ -28,6 +28,7 @@ const routePoint = z
 const reportSchema = z
   .object({
     schemaVersion: z.literal(1),
+    language: z.enum(["en", "de"]).optional(),
     id: z.uuid().transform((x) => x.toLowerCase()),
     status: z.literal("complete"),
     metrics: metricsSchema,

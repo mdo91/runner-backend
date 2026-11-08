@@ -29,3 +29,28 @@ test('live interval and expiration enforced',async()=>{const s=setup();const res
 test('provider failure, malformed output and missing evidence fail safely',async()=>{for(const provider of [async()=>{throw new Error('private upstream detail')},async()=>({text:'bad'} as unknown as Explanation),async()=>({...explanation,insights:[{title:'VO2',detail:'Invented.',evidence:['vo2Max'] as any}]})]) {const s=setup({provider});const result=await s.send();assert.equal(result.statusCode,503);assert.equal(result.json().error,'analysis_unavailable');assert.ok(!result.body.includes('private'));await s.app.close()}});
 test('account deletion removes only its data, rejects reuse and blocks in-flight writes',async()=>{const s=setup();await s.send();await s.send(input,'bob');assert.equal((await s.app.inject({method:'DELETE',url:'/v1/account',headers:{authorization:'Bearer alice','x-firebase-appcheck':'valid'}})).statusCode,204);assert.ok([...s.db.data.keys()].every(k=>!k.startsWith('users/alice/')));assert.ok([...s.db.data.keys()].some(k=>k.startsWith('users/bob/')));assert.equal((await s.send()).statusCode,401);await s.app.close();let finish!:()=>void;const pending=new Promise<void>(r=>{finish=r});const race=setup({provider:async()=>{await pending;return explanation}});const first=race.send();await new Promise(r=>setTimeout(r,20));await race.store.deleteAccount('alice');finish();assert.equal((await first).statusCode,401);assert.ok([...race.db.data.keys()].every(k=>!k.startsWith('users/alice/')));await race.app.close()});
 test('hash canonicalizes object key order and includes model and mode',()=>{assert.equal(inputHash(input,'run','a'),inputHash({...input,metrics:{...input.metrics}},'run','a'));assert.notEqual(inputHash(input,'run','a'),inputHash(input,'live','a'));assert.notEqual(inputHash(input,'run','a'),inputHash(input,'run','b'))});
+
+test('old clients default to English and unsupported languages are rejected', async () => {
+  const s = setup();
+  const { language: _language, ...legacy } = input;
+  assert.equal(requestSchema.parse(legacy).language, 'en');
+  assert.equal((await s.send(legacy)).json().language, 'en');
+  assert.equal((await s.send({...input, language:'fr'})).statusCode, 400);
+  await s.app.close();
+});
+
+test('German reports have localized deterministic text and separate cache entries', async () => {
+  const s = setup();
+  const english = await s.send(input);
+  const german = await s.send({...input, language:'de'});
+  assert.equal(english.statusCode, 200);
+  assert.equal(german.statusCode, 200);
+  assert.equal(german.json().language, 'de');
+  assert.match(german.json().endurance.detail, /mindestens fünf/);
+  assert.match(german.json().missingData[0], /GPS-Route/);
+  assert.equal(s.calls(), 2);
+  await s.send({...input, language:'de'});
+  assert.equal(s.calls(), 2);
+  assert.notEqual(inputHash(input,'run','a'), inputHash({...input,language:'de'},'run','a'));
+  await s.app.close();
+});

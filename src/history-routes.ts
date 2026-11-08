@@ -27,6 +27,10 @@ export function historyRoutes(
       { type: "text/javascript; charset=utf-8", file: "dashboard.js" },
     ],
     [
+      "/dashboard/localization.js",
+      { type: "text/javascript; charset=utf-8", file: "localization.js" },
+    ],
+    [
       "/dashboard/dashboard.css",
       { type: "text/css; charset=utf-8", file: "dashboard.css" },
     ],
